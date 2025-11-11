@@ -88,8 +88,24 @@ file
 +---+----+---------+---------+---------+---------+---------+------+-------+-------+--------+---------+---------+-------+
 ```
 
-2. TODO: reduce DMA transfers
+2. I chose `FREE_DIM = 200` becasue our length is 25600 and we are using a partition size of 128. 
+
+This ran in 15 μs. This is around 10x faster than `FREE_DIM=2` and around `20x` faster than using no free dim at all.
 
 ### Step 2b
 
-## Part 2
+2. When `FREE_DIM=2000`, the kernel execution time was 2.8e-5 seconds, and the dma transfer count was 3.
+
+When `FREE_DIM=1000`, the kernel execution time was 2.6e-5 and the dma transfer count was 6. 
+
+4. When `FREE_DIM=2000`, first all of the loads happen, and then the addition occurs.This is because the `FREE_DIM` is large enough to load the entire length of the vectors in.
+
+When `FREE_DIM=1000`, there are two waves of loads (as the size is half as large). A is in dark green, while B is in a blue gray. But, the result of this is that the arithmetic (in the lime green in vector E) can also happen in two waves. Importantly, the first half of the arithmetic can happen while the second vector a is loading! (this is pipeling). thus, there is less arithmetic to do after the loads have happened, in this setting yielding wall clock speed up.
+
+### Step 3: Matrix Transpose
+
+1.
+
+2. 
+
+## Part 2: Fused Convolution
