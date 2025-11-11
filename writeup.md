@@ -1,5 +1,9 @@
 # Writeup
 
+Xavier Gonzalez
+
+xavier18
+
 ## Part 1
 
 ### Step 1
@@ -104,8 +108,19 @@ When `FREE_DIM=1000`, there are two waves of loads (as the size is half as large
 
 ### Step 3: Matrix Transpose
 
-1.
+1. Execution Time: 86 μs
 
-2. 
+2. I think my kernel is memory-bound because all it involves is moving elements from one part of the matrix to the other (it bascially has an arithmetic intensity of zero).
+
+Maybe technically the tranpose counts as compute, but I'm still doing so many reads and writes that I think it's memory bound.
+
+Looking at the profiler, I believe it's still memory bound.
+
+So far as I can tell, there are 3 important ops in the profiler:
+1. copies from hbm to sbuf (in red, in DMA-E79)
+2. computations (transposes) in TensorMatrixE (yellow)
+3. copies from sbuf to hbm (in green, in DMA-E79)
+
+The yellow compute is in the middle of the two memory ops, which are effectively contiguous, starting before the compute and ending after the compute. Based on this plot, it appears that if I made the compute faster, the overall time wouldn't change much, because the memory ops dominate. But, if I made bandwidth faster, the overall time would go down.
 
 ## Part 2: Fused Convolution
