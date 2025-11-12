@@ -6,6 +6,8 @@ import neuronxcc.nki.language as nl
 import neuronxcc.nki.isa as nisa
 from neuronxcc.nki import baremetal
 
+import pdb
+
 
 """
 A fused convolution - maxpool kernel that you need to implement for Part 2.
@@ -68,11 +70,39 @@ def fused_conv2d_maxpool(X, W, bias, pool_size=1):
     c_in_pmax = nl.tile_size.pmax
     n_tiles_c_in = in_channels // c_in_pmax
 
+    W_sbuf = nl.ndarray( # [out_channels, in_channels, filter_height, filter_width]
+        shape=W.shape,
+        dtype=W.dtype,
+        buffer=nl.sbuf,
+    )
+    print()
+    print(f"batch_size: {batch_size}, in_channels: {in_channels}, input_height: {input_height}, input_width: {input_width}")
+    # pdb.set_trace()
+    X_sbuf = nl.ndarray(
+        shape=(in_channels, input_height, input_width),
+        dtype=X.dtype,
+        buffer=nl.sbuf,
+    )
     # Process the images in batches
-    for b in nl.affine_range(batch_size):
-        raise RuntimeError("Please fill your implementation of computing convolution"
-                           " of X[b] with the weights W and bias b, followed by a"
-                           " maxpool and store the result in X_out[b]")
+    nisa.dma_copy(src=W, dst=W_sbuf)
+    for b in nl.sequential_range(batch_size):
+    # for b in nl.affine_range(batch_size):
+        nisa.dma_copy(
+            src=X[b, :, :, :], dst=X_sbuf
+        )  # Load the input image into SBUF
+        # X_sbuf.reshape((in_channels, input_height * input_width)) # (in_channels, in_height * in_width)
+        res_psum = nl.zeros((out_channels, out_height * out_width), dtype=X.dtype, buffer=nl.psum)
+        for i in nl.affine_range(filter_height):
+            for j in nl.affine_range(filter_width):
+        # raise RuntimeError("Please fill your implementation of computing convolution"
+        #                    " of X[b] with the weights W and bias b, followed by a"
+        #                    " maxpool and store the result in X_out[b]")' 
+                # input_shifted = X[b, :, i:(i+out_height), j:(j+out_width)].reshape((in_channels, out_height * out_width)) # (in_channels, out_height * out_width)
+                input_shifted = X_sbuf[:, i:(i+out_height), j:(j+out_width)].reshape((in_channels, out_height * out_width)) # (in_channels, out_height * out_width)
+                res_psum += nl.transpose(nisa.nc_matmul(input_shifted, nl.transpose(W_sbuf[:, :, i, j]))) # (out_channels, out_height * out_width)
+        res_psum = res_psum.reshape((out_channels, out_height, out_width)) # (out_channels, out_height, out_width)
+        res_sbuf = nisa.tensor_copy(res_psum)
+        nisa.dma_copy(src=res_sbuf, dst=X_out[b])
 
     return X_out
 
