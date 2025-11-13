@@ -10,6 +10,10 @@ import pdb
 
 
 """
+Question:
+* how to od the reshaping / slicing
+
+
 A fused convolution - maxpool kernel that you need to implement for Part 2.
 
 Parameters:
