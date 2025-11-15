@@ -50,8 +50,8 @@ def test_correctness_conv2d_kernel(
 
     # input_channels_list = [128]
     input_channels_list = [128, 256]
-    output_channels_list = [128]
-    # output_channels_list = [128, 256]
+    # output_channels_list = [128]
+    output_channels_list = [128, 256]
     kernel_size_list = [3]
     batch_size_list = [4]
     image_dims_list = [(32, 16)]

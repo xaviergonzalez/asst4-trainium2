@@ -92,23 +92,31 @@ def fused_conv2d_maxpool(X, W, bias, pool_size=1):
         #     buffer=nl.sbuf,
         # )
         for h in nl.sequential_range(out_height):
-            res_psum = nl.zeros((out_channels, out_width), dtype=X.dtype, buffer=nl.psum)
-            for tile_in in nl.sequential_range(n_tiles_c_in):
-                for i in nl.sequential_range(filter_height):
-                    # load current tiles into sbuf
-                    nisa.dma_copy(
-                        src=X[b, tile_in * pmax:(tile_in + 1) * pmax, (i+h), :], dst=X_sbuf
-                    ) 
-                    nisa.dma_copy(src=W[:, tile_in * pmax:(tile_in + 1) * pmax, :, :], dst=W_sbuf)
-                    for j in nl.sequential_range(filter_width):
-                        input_shifted = X_sbuf[:, j:(j+out_width)] # (in_channels [cap at 128], out_width)
-                        W_slice = W_sbuf[:, :, i, j] # (out_channels, in_channels [cap at 128])
-                        WT = nl.transpose(W_slice) # (in_channels [cap at 128], out_channels), might be on PSUM
-                        WT_copy = nisa.tensor_copy(WT)
-                        conv_before_transpose = nisa.nc_matmul(WT_copy, input_shifted) # (out_channels, out_width)
-                        res_psum += conv_before_transpose # (out_channels, out_width)
-            res_sbuf = nisa.tensor_copy(res_psum)
-            nisa.dma_copy(src=res_sbuf, dst=X_out[b, :, h, :])
+            for tile_out in nl.sequential_range(n_tiles_c_out):
+                res_psum = nl.zeros((pmax, out_width), dtype=X.dtype, buffer=nl.psum) # (out_channels [cap at 128], out_width)
+                for tile_in in nl.sequential_range(n_tiles_c_in):
+                    for i in nl.sequential_range(filter_height):
+                        # load current tiles into sbuf
+                        nisa.dma_copy(
+                            src=X[b, tile_in * pmax:(tile_in + 1) * pmax, (i+h), :], dst=X_sbuf
+                        ) 
+                        nisa.dma_copy(src=W[tile_out * pmax:(tile_out + 1) * pmax, tile_in * pmax:(tile_in + 1) * pmax, :, :], dst=W_sbuf)
+                        for j in nl.sequential_range(filter_width):
+                            input_shifted = X_sbuf[:, j:(j+out_width)] # (in_channels [cap at 128], out_width)
+                            W_slice = W_sbuf[:, :, i, j] # (out_channels [cap at 128], in_channels [cap at 128])
+                            WT = nl.transpose(W_slice) # (in_channels [cap at 128], out_channels [cap at 128]), on PSUM
+                            WT_copy = nisa.tensor_copy(WT)
+                            conv_before_transpose = nisa.nc_matmul(WT_copy, input_shifted) # (out_channels, out_width)
+                            res_psum += conv_before_transpose # (out_channels, out_width)
+                res_sbuf = nisa.tensor_copy(res_psum) # (out_channels, out_width)
+                bias_sbuf = nl.ndarray(
+                    shape=(pmax, 1),
+                    dtype=bias.dtype,
+                    buffer=nl.sbuf,
+                )
+                nisa.dma_copy(src=bias[tile_out * pmax:(tile_out + 1) * pmax], dst=bias_sbuf)
+                res_sbuf = nisa.tensor_tensor(res_sbuf, bias_sbuf, op=nl.add)
+                nisa.dma_copy(src=res_sbuf, dst=X_out[b, tile_out * pmax:(tile_out + 1) * pmax, h, :])
 
-    return X_out
+    return X_out # (batch_size, out_channels, out_pool_height, out_pool_width)
 
