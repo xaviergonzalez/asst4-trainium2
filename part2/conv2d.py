@@ -10,10 +10,6 @@ import pdb
 
 
 """
-Question:
-* how to od the reshaping / slicing
-
-
 A fused convolution - maxpool kernel that you need to implement for Part 2.
 
 Parameters:
@@ -81,6 +77,7 @@ def fused_conv2d_maxpool(X, W, bias, pool_size=1):
     )
     print()
     print(f"batch_size: {batch_size}, in_channels: {in_channels}, input_height: {input_height}, input_width: {input_width}")
+    print(f"out_channels: {out_channels}, filter_height: {filter_height}, filter_width: {filter_width}, out_height: {out_height}, out_width: {out_width}")
     # pdb.set_trace()
     X_sbuf = nl.ndarray(
         shape=(in_channels, input_width),
@@ -94,6 +91,7 @@ def fused_conv2d_maxpool(X, W, bias, pool_size=1):
     # )
     # Process the images in batches
     nisa.dma_copy(src=W, dst=W_sbuf)
+    # w_grid = nl.mgrid[0:in_channels, 0:out_channels]
     for b in nl.sequential_range(batch_size): # the same as affine range with @nki.compiler.skip_middle_end_transformations
     # for b in nl.affine_range(batch_size):
         # X_sbuf = nl.ndarray(
@@ -102,14 +100,17 @@ def fused_conv2d_maxpool(X, W, bias, pool_size=1):
         #     buffer=nl.sbuf,
         # )
         for h in nl.sequential_range(out_height):
-            for i in nl.affine_range(filter_height):
+            res_psum = nl.zeros((out_channels, out_width), dtype=X.dtype, buffer=nl.psum)
+            for i in nl.sequential_range(filter_height):
                 nisa.dma_copy(
-                    src=X[b, :, i+h, :], dst=X_sbuf
+                    src=X[b, :, (i+h), :], dst=X_sbuf
                 )  # Load the input image into SBUF
-                res_psum = nl.zeros((out_channels, out_width), dtype=X.dtype, buffer=nl.psum)
-                for j in nl.affine_range(filter_width):
-                    input_shifted = X_sbuf[:, j:(j+out_width)] # (in_channels, out_width) 
-                    conv_before_transpose = nisa.nc_matmul(nl.transpose(W_sbuf[:, :, i, j]), input_shifted) # (out_channels, out_width)
+                for j in nl.sequential_range(filter_width):
+                    input_shifted = X_sbuf[:, j:(j+out_width)] # (in_channels, out_width)
+                    W_slice = W_sbuf[:, :, i, j] # (out_channels, in_channels)
+                    WT = nl.transpose(W_slice) # (in_channels, out_channels), might be on PSUM
+                    WT_copy = nisa.tensor_copy(WT)
+                    conv_before_transpose = nisa.nc_matmul(WT_copy, input_shifted) # (out_channels, out_width)
                     res_psum += conv_before_transpose # (out_channels, out_width)
             res_sbuf = nisa.tensor_copy(res_psum)
             nisa.dma_copy(src=res_sbuf, dst=X_out[b, :, h, :])
