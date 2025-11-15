@@ -67,31 +67,23 @@ def fused_conv2d_maxpool(X, W, bias, pool_size=1):
     )
 
     # Various tiling dimensions (You may want to define more of them)
-    c_in_pmax = nl.tile_size.pmax
-    n_tiles_c_in = in_channels // c_in_pmax
+    pmax = nl.tile_size.pmax # 128
+    n_tiles_c_in = in_channels // pmax
+    n_tiles_c_out = out_channels // pmax
 
-    W_sbuf = nl.ndarray( # [out_channels, in_channels, filter_height, filter_width]
-        shape=W.shape,
+    # loop over number of tiles
+    # for tile_out in nl.sequential_range(n_tiles_c_out):
+
+    W_sbuf = nl.ndarray( # [out_channels [cap at 128], in_channels [cap at 128], filter_height, filter_width]
+        shape=(pmax, pmax, filter_height, filter_width),
         dtype=W.dtype,
         buffer=nl.sbuf,
     )
-    print()
-    print(f"batch_size: {batch_size}, in_channels: {in_channels}, input_height: {input_height}, input_width: {input_width}")
-    print(f"out_channels: {out_channels}, filter_height: {filter_height}, filter_width: {filter_width}, out_height: {out_height}, out_width: {out_width}")
-    # pdb.set_trace()
     X_sbuf = nl.ndarray(
-        shape=(in_channels, input_width),
+        shape=(pmax, input_width), # (in_channels [cap at 128], input_width)
         dtype=X.dtype,
         buffer=nl.sbuf,
     )
-    # X_sbuf = nl.ndarray(
-    #     shape=(batch_size, in_channels, input_height, input_width),
-    #     dtype=X.dtype,
-    #     buffer=nl.sbuf,
-    # )
-    # Process the images in batches
-    nisa.dma_copy(src=W, dst=W_sbuf)
-    # w_grid = nl.mgrid[0:in_channels, 0:out_channels]
     for b in nl.sequential_range(batch_size): # the same as affine range with @nki.compiler.skip_middle_end_transformations
     # for b in nl.affine_range(batch_size):
         # X_sbuf = nl.ndarray(
@@ -101,17 +93,20 @@ def fused_conv2d_maxpool(X, W, bias, pool_size=1):
         # )
         for h in nl.sequential_range(out_height):
             res_psum = nl.zeros((out_channels, out_width), dtype=X.dtype, buffer=nl.psum)
-            for i in nl.sequential_range(filter_height):
-                nisa.dma_copy(
-                    src=X[b, :, (i+h), :], dst=X_sbuf
-                )  # Load the input image into SBUF
-                for j in nl.sequential_range(filter_width):
-                    input_shifted = X_sbuf[:, j:(j+out_width)] # (in_channels, out_width)
-                    W_slice = W_sbuf[:, :, i, j] # (out_channels, in_channels)
-                    WT = nl.transpose(W_slice) # (in_channels, out_channels), might be on PSUM
-                    WT_copy = nisa.tensor_copy(WT)
-                    conv_before_transpose = nisa.nc_matmul(WT_copy, input_shifted) # (out_channels, out_width)
-                    res_psum += conv_before_transpose # (out_channels, out_width)
+            for tile_in in nl.sequential_range(n_tiles_c_in):
+                for i in nl.sequential_range(filter_height):
+                    # load current tiles into sbuf
+                    nisa.dma_copy(
+                        src=X[b, tile_in * pmax:(tile_in + 1) * pmax, (i+h), :], dst=X_sbuf
+                    ) 
+                    nisa.dma_copy(src=W[:, tile_in * pmax:(tile_in + 1) * pmax, :, :], dst=W_sbuf)
+                    for j in nl.sequential_range(filter_width):
+                        input_shifted = X_sbuf[:, j:(j+out_width)] # (in_channels [cap at 128], out_width)
+                        W_slice = W_sbuf[:, :, i, j] # (out_channels, in_channels [cap at 128])
+                        WT = nl.transpose(W_slice) # (in_channels [cap at 128], out_channels), might be on PSUM
+                        WT_copy = nisa.tensor_copy(WT)
+                        conv_before_transpose = nisa.nc_matmul(WT_copy, input_shifted) # (out_channels, out_width)
+                        res_psum += conv_before_transpose # (out_channels, out_width)
             res_sbuf = nisa.tensor_copy(res_psum)
             nisa.dma_copy(src=res_sbuf, dst=X_out[b, :, h, :])
 
