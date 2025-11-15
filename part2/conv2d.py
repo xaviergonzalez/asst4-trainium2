@@ -93,7 +93,7 @@ def fused_conv2d_maxpool(X, W, bias, pool_size=1):
         # )
         for h in nl.sequential_range(out_height):
             for tile_out in nl.sequential_range(n_tiles_c_out):
-                res_psum = nl.zeros((pmax, out_width), dtype=X.dtype, buffer=nl.psum) # (out_channels [cap at 128], out_width)
+                res_psum = nl.zeros((pmax, out_width), dtype=nl.float32, buffer=nl.psum) # (out_channels [cap at 128], out_width). Needs to be FP32
                 for tile_in in nl.sequential_range(n_tiles_c_in):
                     for i in nl.sequential_range(filter_height):
                         # load current tiles into sbuf
