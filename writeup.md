@@ -124,3 +124,29 @@ So far as I can tell, there are 3 important ops in the profiler:
 The yellow compute is in the middle of the two memory ops, which are effectively contiguous, starting before the compute and ending after the compute. Based on this plot, it appears that if I made the compute faster, the overall time wouldn't change much, because the memory ops dominate. But, if I made bandwidth faster, the overall time would go down.
 
 ## Part 2: Fused Convolution
+
+### Brief description
+
+I tiled over both the out_channels and the in_channels. I wanted to load in large blocks, but without tiling I ran into the difficulty that the partition dimension can be max 128, so I broke up the in_channels and out_channels into tiles of size 128.
+
+Furthermore, for max pooling, I loaded in pool_size number of rows at time.
+
+I then computed the convolution (via a matrix multiply) in a tight inner loop, where I looped for filter_height and filter_width, accumulating the sum in PSUM. This is how I built up the convolved output, row by row. When I had finished this summation, I wrote from PSUM to SBUF.
+
+Finally, in SBUF, I performed max pooling. Only after maxpooling did I add in the bias. Finally, I wrote to the output tensor (on HBM).
+
+### Optimization
+
+I experimented with trying to load different numbers of rows for the maxpools, trying much larger nubmers of rows at a time. However, I found that if I tried to maxpool over a large number of rows, there was actually a period when the tensor engine was very idle, damaging performance. Thus, I settled on loading in pool_size rows at a time for the maxpooling.
+
+The biggest optimization by far was moving ops higher in the loop structure so they weren't acted on redudnantly; and the biggest in this regard by far was moving the loading of the entire weight matrix into HBUF, and doing the transpositions outside of the main loop. This saved many many computer, and in general allowed for me to do mat muls without any transpositions getting in the way and slowing down computation.
+
+### Achieved MFU
+
+* (no maxpool, FP32): 41%
+
+* (no maxpool, FP16): 90%
+
+* (maxpool, FP32): 41%
+
+* (maxpool, FP16): 90%

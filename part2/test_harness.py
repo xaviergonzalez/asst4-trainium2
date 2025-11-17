@@ -211,28 +211,28 @@ if __name__ == "__main__":
         #     "use_bias": True,
         #     "use_maxpool": False,
         # },
-        # {
-        #     "use_larger_images": True,
-        #     "use_bias": False,
-        #     "use_maxpool": False,
-        # },
-        # {
-        #     "use_larger_images": True,
-        #     "use_bias": True,
-        #     "use_maxpool": False,
-        # },
+        {
+            "use_larger_images": True,
+            "use_bias": False,
+            "use_maxpool": False,
+        },
+        {
+            "use_larger_images": True,
+            "use_bias": True,
+            "use_maxpool": False,
+        },
     ]
-    # if args.test_maxpool:
+    if args.test_maxpool:
         # correctness_tests.append({ # XG add test for maxpool
         #     "use_larger_images": False,
         #     "use_bias": True,
         #     "use_maxpool": True,
         # })
-        # correctness_tests.append({
-        #     "use_larger_images": True,
-        #     "use_bias": True,
-        #     "use_maxpool": True,
-        # })
+        correctness_tests.append({
+            "use_larger_images": True,
+            "use_bias": True,
+            "use_maxpool": True,
+        })
     
     for test_case in correctness_tests:
         print("\nRunning correctness test for conv2d kernel with "
@@ -254,10 +254,10 @@ if __name__ == "__main__":
     
     # --------- PERFORMANCE TESTS ---------
     performance_tests = [
-        # {
-        #     "pool_size": 1,
-        #     "dtype": np.float32,
-        # },
+        {
+            "pool_size": 1,
+            "dtype": np.float32,
+        },
         {
             "pool_size": 1,
             "dtype": np.float16,
@@ -265,10 +265,10 @@ if __name__ == "__main__":
     ]
     if args.test_maxpool:
         performance_tests.extend([
-        #     {
-        #     "pool_size": 2,
-        #     "dtype": np.float32,
-        # },
+            {
+            "pool_size": 2,
+            "dtype": np.float32,
+        },
         {
             "pool_size": 2,
             "dtype": np.float16,
