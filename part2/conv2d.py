@@ -71,9 +71,7 @@ def fused_conv2d_maxpool(X, W, bias, pool_size=1):
     n_tiles_c_in = in_channels // pmax
     n_tiles_c_out = out_channels // pmax
 
-    # loop over number of tiles
-    # for tile_out in nl.sequential_range(n_tiles_c_out):
-
+    # prepare sbuf arrays
     W_sbuf = nl.ndarray( # [out_channels [cap at 128], in_channels [cap at 128], filter_height, filter_width]
         shape=(pmax, pmax, filter_height, filter_width),
         dtype=W.dtype,
@@ -84,14 +82,14 @@ def fused_conv2d_maxpool(X, W, bias, pool_size=1):
         dtype=X.dtype,
         buffer=nl.sbuf,
     )
-    for b in nl.sequential_range(batch_size): # the same as affine range with @nki.compiler.skip_middle_end_transformations
-        for tile_out in nl.sequential_range(n_tiles_c_out): # tile over the out channels
-            for ph in nl.sequential_range(out_pool_height):
-                tile = nl.ndarray(
+    tile = nl.ndarray(
                     shape=(pmax, pool_size, out_width), # (out_channels [cap at 128], pool_size, out_width)
                     dtype=X.dtype,
                     buffer=nl.sbuf,
                 )
+    for b in nl.sequential_range(batch_size): # the same as affine range with @nki.compiler.skip_middle_end_transformations
+        for tile_out in nl.sequential_range(n_tiles_c_out): # tile over the out channels
+            for ph in nl.sequential_range(out_pool_height):
                 for p in nl.sequential_range(pool_size):
                     h = ph * pool_size + p
                     res_psum = nl.zeros((pmax, out_width), dtype=nl.float32, buffer=nl.psum) # (out_channels [cap at 128], out_width). Needs to be FP32. On PSUM.
