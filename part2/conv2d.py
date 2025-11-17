@@ -98,7 +98,9 @@ def fused_conv2d_maxpool(X, W, bias, pool_size=1):
                     )
             for i in nl.sequential_range(filter_height):
                 for j in nl.sequential_range(filter_width):
-                    W_sbuf[:, :, tile_out, tile_in, i, j] = nisa.dma_transpose(W_sbuf[:, :, tile_out, tile_in, i, j]) # switch to be (in_channels, out_channels)
+                    WT = nl.transpose(W_sbuf[:, :, tile_out, tile_in, i ,j]) # (in_channels [cap at 128], out_channels [cap at 128])
+                    WT_copy = nisa.tensor_copy(WT)
+                    W_sbuf[:, :, tile_out, tile_in, i, j] = WT_copy
                     
     for b in nl.sequential_range(batch_size): # the same as affine range with @nki.compiler.skip_middle_end_transformations
         for tile_out in nl.sequential_range(n_tiles_c_out): # tile over the out channels
