@@ -86,42 +86,50 @@ def fused_conv2d_maxpool(X, W, bias, pool_size=1):
     )
     for b in nl.sequential_range(batch_size): # the same as affine range with @nki.compiler.skip_middle_end_transformations
         for tile_out in nl.sequential_range(n_tiles_c_out): # tile over the out channels
-            for ph in nl.sequential_range(out_pool_height):
-                tile_pool_buf = nl.ndarray(
-                    shape=(pmax, pool_size, out_width), # (out_channels [cap at 128], pool size (in height direction), out_width)
-                    dtype=X.dtype,
+            # for ph in nl.sequential_range(out_pool_height):
+            tile = nl.ndarray(
+                shape=(pmax, out_height, out_width), # (out_channels [cap at 128], out_height, out_width)
+                dtype=X.dtype,
+                buffer=nl.sbuf,
+            )
+            # for p in nl.sequential_range(pool_size):
+            for h in nl.sequential_range(out_height): 
+                # h = ph * pool_size + p
+                res_psum = nl.zeros((pmax, out_width), dtype=nl.float32, buffer=nl.psum) # (out_channels [cap at 128], out_width). Needs to be FP32. On PSUM.
+                for tile_in in nl.sequential_range(n_tiles_c_in):
+                    nisa.dma_copy(src=W[tile_out * pmax:(tile_out + 1) * pmax, tile_in * pmax:(tile_in + 1) * pmax, :, :], dst=W_sbuf)
+                    for i in nl.sequential_range(filter_height):
+                        # load current tiles into sbuf
+                        nisa.dma_copy(
+                            src=X[b, tile_in * pmax:(tile_in + 1) * pmax, (i+h), :], dst=X_sbuf
+                        ) 
+                        for j in nl.sequential_range(filter_width):
+                            input_shifted = X_sbuf[:, j:(j+out_width)] # (in_channels [cap at 128], out_width)
+                            W_slice = W_sbuf[:, :, i, j] # (out_channels [cap at 128], in_channels [cap at 128])
+                            WT = nl.transpose(W_slice) # (in_channels [cap at 128], out_channels [cap at 128]), on PSUM
+                            WT_copy = nisa.tensor_copy(WT)
+                            conv_res = nisa.nc_matmul(WT_copy, input_shifted) # (out_channels [cap at 128], out_width)
+                            res_psum += conv_res # (out_channels [cap at 128], out_width), on PSUM
+                res_sbuf = nisa.tensor_copy(res_psum) # (out_channels [cap at 128], out_width)
+                # bias_sbuf = nl.ndarray(
+                #     shape=(pmax, 1),
+                #     dtype=bias.dtype,
+                #     buffer=nl.sbuf,
+                # )
+                # nisa.dma_copy(src=bias[tile_out * pmax:(tile_out + 1) * pmax], dst=bias_sbuf)
+                # res_sbuf = nisa.tensor_tensor(res_sbuf, bias_sbuf, op=nl.add) # (out_channels [cap at 128], out_width)
+                nisa.dma_copy(src=res_sbuf, dst=tile[:, h, :]) 
+            # maxpool
+            pre_maxpool = tile.reshape((pmax, out_height // pool_size, pool_size, out_width // pool_size, pool_size))
+            post_maxpool = nisa.tensor_reduce(nl.max, pre_maxpool, axis=(2,4)) # (pmax, pool_height, pool_width)
+            bias_sbuf = nl.ndarray(
+                    shape=(pmax, 1),
+                    dtype=bias.dtype,
                     buffer=nl.sbuf,
                 )
-                for p in nl.sequential_range(pool_size): 
-                    h = ph * pool_size + p
-                    res_psum = nl.zeros((pmax, out_width), dtype=nl.float32, buffer=nl.psum) # (out_channels [cap at 128], out_width). Needs to be FP32
-                    for tile_in in nl.sequential_range(n_tiles_c_in):
-                        for i in nl.sequential_range(filter_height):
-                            # load current tiles into sbuf
-                            nisa.dma_copy(
-                                src=X[b, tile_in * pmax:(tile_in + 1) * pmax, (i+h), :], dst=X_sbuf
-                            ) 
-                            nisa.dma_copy(src=W[tile_out * pmax:(tile_out + 1) * pmax, tile_in * pmax:(tile_in + 1) * pmax, :, :], dst=W_sbuf)
-                            for j in nl.sequential_range(filter_width):
-                                input_shifted = X_sbuf[:, j:(j+out_width)] # (in_channels [cap at 128], out_width)
-                                W_slice = W_sbuf[:, :, i, j] # (out_channels [cap at 128], in_channels [cap at 128])
-                                WT = nl.transpose(W_slice) # (in_channels [cap at 128], out_channels [cap at 128]), on PSUM
-                                WT_copy = nisa.tensor_copy(WT)
-                                conv_res = nisa.nc_matmul(WT_copy, input_shifted) # (out_channels [cap at 128], out_width)
-                                res_psum += conv_res # (out_channels [cap at 128], out_width), on PSUM
-                    res_sbuf = nisa.tensor_copy(res_psum) # (out_channels [cap at 128], out_width)
-                    bias_sbuf = nl.ndarray(
-                        shape=(pmax, 1),
-                        dtype=bias.dtype,
-                        buffer=nl.sbuf,
-                    )
-                    nisa.dma_copy(src=bias[tile_out * pmax:(tile_out + 1) * pmax], dst=bias_sbuf)
-                    res_sbuf = nisa.tensor_tensor(res_sbuf, bias_sbuf, op=nl.add) # (out_channels [cap at 128], out_width)
-                    nisa.dma_copy(src=res_sbuf, dst=tile_pool_buf[:, p, :]) 
-                # maxpool
-                pre_maxpool = tile_pool_buf.reshape((pmax, pool_size, out_width // pool_size, pool_size))
-                post_maxpool = nisa.tensor_reduce(nl.max, pre_maxpool, axis=(1,3)) # (pmax, pool_width)
-                nisa.dma_copy(src=post_maxpool, dst=X_out[b, tile_out * pmax:(tile_out + 1) * pmax, ph, :])
+            nisa.dma_copy(src=bias[tile_out * pmax:(tile_out + 1) * pmax], dst=bias_sbuf)
+            post_maxpool = nisa.tensor_tensor(post_maxpool, bias_sbuf, op=nl.add) # (out_channels [cap at 128], out_width)
+            nisa.dma_copy(src=post_maxpool, dst=X_out[b, tile_out * pmax:(tile_out + 1) * pmax])
 
-    return X_out # (batch_size, out_channels, out_pool_height, out_pool_width)
+    return X_out # (batch_size, out_channels, out_pool_height, out_pool_width), on HBM
 

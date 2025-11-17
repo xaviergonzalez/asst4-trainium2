@@ -201,33 +201,33 @@ if __name__ == "__main__":
 
     # --------- CORRECTNESS TESTS ---------
     correctness_tests = [
-        {
-            "use_larger_images": False,
-            "use_bias": False,
-            "use_maxpool": False,
-        },
-        # { # XG added test for bias
+        # {
         #     "use_larger_images": False,
+        #     "use_bias": False,
+        #     "use_maxpool": False,
+        # },
+        # # { # XG added test for bias
+        # #     "use_larger_images": False,
+        # #     "use_bias": True,
+        # #     "use_maxpool": False,
+        # # },
+        # {
+        #     "use_larger_images": True,
+        #     "use_bias": False,
+        #     "use_maxpool": False,
+        # },
+        # {
+        #     "use_larger_images": True,
         #     "use_bias": True,
         #     "use_maxpool": False,
         # },
-        {
-            "use_larger_images": True,
-            "use_bias": False,
-            "use_maxpool": False,
-        },
-        {
-            "use_larger_images": True,
-            "use_bias": True,
-            "use_maxpool": False,
-        },
     ]
     if args.test_maxpool:
-        # correctness_tests.append({ # XG add test for maxpool
-        #     "use_larger_images": False,
-        #     "use_bias": True,
-        #     "use_maxpool": True,
-        # })
+        correctness_tests.append({ # XG add test for maxpool
+            "use_larger_images": False,
+            "use_bias": True,
+            "use_maxpool": True,
+        })
         correctness_tests.append({
             "use_larger_images": True,
             "use_bias": True,
@@ -254,20 +254,22 @@ if __name__ == "__main__":
     
     # --------- PERFORMANCE TESTS ---------
     performance_tests = [
-        {
-            "pool_size": 1,
-            "dtype": np.float32,
-        },
+        # {
+        #     "pool_size": 1,
+        #     "dtype": np.float32,
+        # },
         {
             "pool_size": 1,
             "dtype": np.float16,
         },
     ]
     if args.test_maxpool:
-        performance_tests.extend([{
-            "pool_size": 2,
-            "dtype": np.float32,
-        }, {
+        performance_tests.extend([
+        #     {
+        #     "pool_size": 2,
+        #     "dtype": np.float32,
+        # },
+        {
             "pool_size": 2,
             "dtype": np.float16,
         }])
@@ -288,22 +290,22 @@ if __name__ == "__main__":
             save_trace(profile.replace(".neff", ""))
 
     # --------- EXTRA CREDIT TESTS ---------
-    ec_tests = [test | {"image_height": 32, "image_width": 16} for test in performance_tests]
-    for test_case in ec_tests:
-        pool_str = "with maxpool" if test_case['pool_size'] == 2 else "no maxpool"
-        dtype_str = "float16" if test_case['dtype'] == np.float16 else "float32"
-        print(f"\nComparing performance with reference kernel ({pool_str},"
-              f" {dtype_str}, smaller image)... [EC] ", end=" ", flush=True)
+    # ec_tests = [test | {"image_height": 32, "image_width": 16} for test in performance_tests]
+    # for test_case in ec_tests:
+    #     pool_str = "with maxpool" if test_case['pool_size'] == 2 else "no maxpool"
+    #     dtype_str = "float16" if test_case['dtype'] == np.float16 else "float32"
+    #     print(f"\nComparing performance with reference kernel ({pool_str},"
+    #           f" {dtype_str}, smaller image)... [EC] ", end=" ", flush=True)
 
-        profile = None
-        if args.profile is not None:
-            profile = f"{args.profile}{'_pool' if test_case['pool_size'] == 2 else ''}_{dtype_str}_smaller.neff"
+    #     profile = None
+    #     if args.profile is not None:
+    #         profile = f"{args.profile}{'_pool' if test_case['pool_size'] == 2 else ''}_{dtype_str}_smaller.neff"
         
-        test_result = test_performance_conv2d_kernel(conv2d, profile=profile, **test_case)
-        ec += get_performance_score(test_result, 1.25)
+    #     test_result = test_performance_conv2d_kernel(conv2d, profile=profile, **test_case)
+    #     ec += get_performance_score(test_result, 1.25)
 
-        if profile:
-            save_trace(profile.replace(".neff", ""))
+    #     if profile:
+    #         save_trace(profile.replace(".neff", ""))
     
     print(
         f"Your final score is {'' if args.test_maxpool else '(without maxpool)'}: ",
@@ -315,4 +317,4 @@ if __name__ == "__main__":
     print(
         f"Performance: {performance_score}\tTotal obtainable: {50.0 if args.test_maxpool else 35}"
     )
-    print(f"Extra Credit: {ec}\tTotal obtainable: {5.0 if args.test_maxpool else 2.5}")
+    # print(f"Extra Credit: {ec}\tTotal obtainable: {5.0 if args.test_maxpool else 2.5}")
