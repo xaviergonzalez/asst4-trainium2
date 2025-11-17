@@ -82,7 +82,7 @@ def fused_conv2d_maxpool(X, W, bias, pool_size=1):
         dtype=X.dtype,
         buffer=nl.sbuf,
     )
-    tile = nl.ndarray(
+    tile_sbuf = nl.ndarray(
                     shape=(pmax, pool_size, out_width), # (out_channels [cap at 128], pool_size, out_width)
                     dtype=X.dtype,
                     buffer=nl.sbuf,
@@ -107,10 +107,11 @@ def fused_conv2d_maxpool(X, W, bias, pool_size=1):
                                 WT_copy = nisa.tensor_copy(WT)
                                 conv_res = nisa.nc_matmul(WT_copy, input_shifted) # (out_channels [cap at 128], out_width)
                                 res_psum += conv_res # (out_channels [cap at 128], out_width), on PSUM
-                    res_sbuf = nisa.tensor_copy(res_psum) # (out_channels [cap at 128], out_width)
-                    nisa.dma_copy(src=res_sbuf, dst=tile[:, p, :]) 
+                    tile_sbuf[:, p, :] = nisa.tensor_copy(res_psum)
+                    # res_sbuf = nisa.tensor_copy(res_psum) # (out_channels [cap at 128], out_width)
+                    # nisa.dma_copy(src=res_sbuf, dst=tile_sbuf[:, p, :]) 
                 # maxpool
-                pre_maxpool = tile.reshape((pmax, pool_size, out_width // pool_size, pool_size))
+                pre_maxpool = tile_sbuf.reshape((pmax, pool_size, out_width // pool_size, pool_size))
                 post_maxpool = nisa.tensor_reduce(nl.max, pre_maxpool, axis=(1,3)) # (pmax, pool_width)
                 bias_sbuf = nl.ndarray(
                         shape=(pmax, 1),

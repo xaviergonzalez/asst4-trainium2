@@ -201,11 +201,11 @@ if __name__ == "__main__":
 
     # --------- CORRECTNESS TESTS ---------
     correctness_tests = [
-        # {
-        #     "use_larger_images": False,
-        #     "use_bias": False,
-        #     "use_maxpool": False,
-        # },
+        {
+            "use_larger_images": False,
+            "use_bias": False,
+            "use_maxpool": False,
+        },
         # { # XG added test for bias
         #     "use_larger_images": False,
         #     "use_bias": True,
