@@ -150,3 +150,72 @@ The biggest optimization by far was moving ops higher in the loop structure so t
 * (maxpool, FP32): 41%
 
 * (maxpool, FP16): 90%
+
+### Outputs
+
+```
+(aws_neuronx_venv_pytorch_2_8) ubuntu@ip-172-31-47-171:~/asst4-trainium2/part2$ python test_harness.py --test_maxpool --profile done
+
+Running correctness test for conv2d kernel with smaller image... Passed 😎
+
+Running correctness test for conv2d kernel with larger image... Passed 😎
+
+Running correctness test for conv2d kernel with larger image + bias... Passed 😎
+
+Running correctness test for conv2d kernel with larger image + bias + maxpool... Passed 😎
+
+Comparing performance with reference kernel (no maxpool, float32)... 
+done_float32                                                                    
++---+----+---------+---------+---------+-------+--------+------+-------+-------+--------+---------+---------+-------+
+  B   NC   NC USED   WEIGHTS   MODE      INF/S   IRES/S   L(1)   L(50)   L(99)   NCL(1)   NCL(50)   NCL(99)   %USER  
+  1   1    1         dynamic   LIBMODE   86.62   86.62    3891   3933    3939    3831     3832      3832      N/A    
++---+----+---------+---------+---------+-------+--------+------+-------+-------+--------+---------+---------+-------+
+
+
+Execution Time for student implementation: 3832 μs
+Performance test passed 😍
+
+NEFF / NTFF files generated with names: done_float32.neff, done_float32.ntff
+
+Comparing performance with reference kernel (no maxpool, float16)... 
+done_float16                                                                    
++---+----+---------+---------+---------+--------+--------+------+-------+-------+--------+---------+---------+-------+
+  B   NC   NC USED   WEIGHTS   MODE      INF/S    IRES/S   L(1)   L(50)   L(99)   NCL(1)   NCL(50)   NCL(99)   %USER  
+  1   1    1         dynamic   LIBMODE   208.75   208.75   893    907     918     823      824       824       N/A    
++---+----+---------+---------+---------+--------+--------+------+-------+-------+--------+---------+---------+-------+
+
+
+Execution Time for student implementation: 824 μs
+Performance test passed 😍
+
+NEFF / NTFF files generated with names: done_float16.neff, done_float16.ntff
+
+Comparing performance with reference kernel (with maxpool, float32)... 
+done_pool_float32                                                               
++---+----+---------+---------+---------+--------+--------+------+-------+-------+--------+---------+---------+-------+
+  B   NC   NC USED   WEIGHTS   MODE      INF/S    IRES/S   L(1)   L(50)   L(99)   NCL(1)   NCL(50)   NCL(99)   %USER  
+  1   1    1         dynamic   LIBMODE   113.52   113.52   3879   3886    3936    3828     3829      3830      N/A    
++---+----+---------+---------+---------+--------+--------+------+-------+-------+--------+---------+---------+-------+
+
+
+Execution Time for student implementation: 3830 μs
+Performance test passed 😍
+
+NEFF / NTFF files generated with names: done_pool_float32.neff, done_pool_float32.ntff
+
+Comparing performance with reference kernel (with maxpool, float16)... 
+done_pool_float16                                                               
++---+----+---------+---------+---------+--------+--------+------+-------+-------+--------+---------+---------+-------+
+  B   NC   NC USED   WEIGHTS   MODE      INF/S    IRES/S   L(1)   L(50)   L(99)   NCL(1)   NCL(50)   NCL(99)   %USER  
+  1   1    1         dynamic   LIBMODE   290.48   290.48   892    913     924     823      824       825       N/A    
++---+----+---------+---------+---------+--------+--------+------+-------+-------+--------+---------+---------+-------+
+
+
+Execution Time for student implementation: 825 μs
+Performance test passed 😍
+
+NEFF / NTFF files generated with names: done_pool_float16.neff, done_pool_float16.ntff
+Your final score is :  60.0 / 60.0
+Correctness: 10.0       Total obtainable: 10.0
+Performance: 50.0       Total obtainable: 50.0
+```
